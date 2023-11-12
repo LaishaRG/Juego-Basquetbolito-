@@ -6,7 +6,7 @@ import random
 pygame.init()
 
 # Configurar la ventana
-WIDTH, HEIGHT = 600, 750
+WIDTH, HEIGHT = 700, 600
 win = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption('Basquetbolito')
 
@@ -18,13 +18,20 @@ pygame.display.set_icon(icon)
 
 # Configurar la bola
 BALL_RADIUS = 12
+ball = pygame.Rect(random.randint(0, WIDTH - BALL_RADIUS * 6), 0, BALL_RADIUS * 6, BALL_RADIUS * 6)
+BASE_BALL_VELOCITY = 4
 BALL_VELOCITY = 4
-balls = []  # Lista para almacenar las bolas
+BALL_VELOCITY_MULTIPLIERS = {
+    5: 1.3,
+    10: 1.5,
+    20: 1.7,
+    25: 2.0
+}
 
 # Configurar la canasta
 BASKET_WIDTH, BASKET_HEIGHT = 100, 50
-basket = pygame.Rect(WIDTH // 2 - BASKET_WIDTH // 2, HEIGHT - BASKET_HEIGHT * 4, BASKET_WIDTH, BASKET_HEIGHT)
-BASKET_VELOCITY = 6
+basket = pygame.Rect(WIDTH // 2 - BASKET_WIDTH // 2, HEIGHT - BASKET_HEIGHT * 2, BASKET_WIDTH, BASKET_HEIGHT)
+BASKET_VELOCITY = 8
 
 # Configurar el puntaje
 score = 0
@@ -38,15 +45,6 @@ resume_button = pygame.Rect(WIDTH // 2 - button_width - 10, HEIGHT // 2 - button
                             button_height)
 quit_button = pygame.Rect(WIDTH // 2 + 10, HEIGHT // 2 - button_height // 2, button_width, button_height)
 
-# Inicializar la velocidad del balón y de la canasta
-ball_velocity = BALL_VELOCITY
-basket_velocity = BASKET_VELOCITY
-
-# Función para crear una nueva bola
-def crear_nueva_bola():
-    new_ball = pygame.Rect(random.randint(0, WIDTH - BALL_RADIUS * 6), 0, BALL_RADIUS * 6, BALL_RADIUS * 6)
-    balls.append(new_ball)
-
 # Bucle principal del juego
 running = True
 while running:
@@ -57,12 +55,11 @@ while running:
     # Dibujar la imagen de fondo
     win.blit(background_image, (0, 0))
 
-    for ball in balls:
-        # Cargar y redimensionar la imagen de la bola
-        ball_image = pygame.image.load('balon.png')
-        ball_image = pygame.transform.scale(ball_image, (BALL_RADIUS * 6, BALL_RADIUS * 6))
-        # Dibujar la imagen de la bola
-        win.blit(ball_image, (ball.x, ball.y))
+    # Cargar y redimensionar la imagen de la bola
+    ball_image = pygame.image.load('balon.png')
+    ball_image = pygame.transform.scale(ball_image, (BALL_RADIUS * 6, BALL_RADIUS * 6))
+    # Dibujar la imagen de la bola
+    win.blit(ball_image, (ball.x, ball.y))
 
     basket_image = pygame.image.load('canasta.png')
     basket_image = pygame.transform.scale(basket_image, (BASKET_WIDTH, BASKET_HEIGHT))
@@ -75,54 +72,77 @@ while running:
     win.blit(best_score_text, (WIDTH // 2 - best_score_text.get_width() // 2, 50))
 
     # Manejar eventos
+
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_SPACE:
                 paused = not paused
-            elif event.key == pygame.K_LEFT:
-                basket.x -= basket_velocity
-            elif event.key == pygame.K_RIGHT:
-                basket.x += basket_velocity
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if paused:
+                if resume_button.collidepoint(pygame.mouse.get_pos()):
+                    paused = False
+                elif quit_button.collidepoint(pygame.mouse.get_pos()):
+                    running = False
 
     if not paused:
-        for ball in balls:
-            # Mover la bola con la velocidad actual
-            ball.y += ball_velocity
+        for score_threshold, multiplier in BALL_VELOCITY_MULTIPLIERS.items():
+            if score >= score_threshold and BALL_VELOCITY != BASE_BALL_VELOCITY * multiplier:
+                BALL_VELOCITY = BASE_BALL_VELOCITY * multiplier
+
+        # Mover la bola
+        ball.y += BALL_VELOCITY
+
+        # Mover la canasta
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_LEFT] and basket.left > 0:
+            basket.x -= BASKET_VELOCITY
+        if keys[pygame.K_RIGHT] and basket.right < WIDTH:
+            basket.x += BASKET_VELOCITY
+
+        basket.y = HEIGHT - BASKET_HEIGHT * 2
 
         # Comprobar si la bola ha caído en la canasta o fuera de ella
-        for ball in balls:
-            if ball.bottom >= basket.top:
-                if basket.left <= ball.centerx <= basket.right:
-                    score += 1
-                    if score > best_score:
-                        best_score += 1
-                    print(f"¡Punto! Tu puntuación es ahora {score}.")
-                    balls.remove(ball)
-                    if score >= 7:
-                        # Aumentar la velocidad de la canasta y el balón
-                        basket_velocity += 2  # Ajusta la velocidad de la canasta como desees
-                        ball_velocity += 2  # Ajusta la velocidad del balón como desees
-
-        # Eliminar bolas que han salido de la pantalla
-        balls = [ball for ball in balls if ball.y < HEIGHT]
-
-        # Crear nuevas bolas si no hay suficientes en la pantalla
-        while len(balls) < 3:  # Puedes ajustar este número según tus preferencias
-            crear_nueva_bola()
+        if ball.bottom >= basket.top:
+            if basket.left <= ball.centerx <= basket.right:
+                score += 1
+                if score > best_score:
+                    best_score += 1
+                ball.center = (random.randint(0, WIDTH - BALL_RADIUS * 2), BALL_RADIUS)
+            else:
+                score = 0
+                ball.center = (random.randint(0, WIDTH - BALL_RADIUS * 2), BALL_RADIUS)
+                BALL_VELOCITY = BASE_BALL_VELOCITY
+                paused = True
 
     else:
         pygame.draw.rect(win, (245, 152, 66), resume_button)
         pygame.draw.rect(win, (245, 152, 66), quit_button)
         # Crear las superficies de texto
-        resume_text = font.render("Reanudar", True, (255, 255, 255))
-        quit_text = font.render("Cerrar", True, (255, 255, 255))
+        lost_text = font.render("¡Has perdido!", True, (255, 255, 255))
+        resume_text = font.render("Reintentar", True, (255, 255, 255))
+        quit_text = font.render("Salir", True, (255, 255, 255))
         # Dibujar el texto en los botones
+        win.blit(lost_text, (WIDTH // 2 - lost_text.get_width() // 2, HEIGHT // 2 - 80))
         win.blit(resume_text, (resume_button.x + (resume_button.width - resume_text.get_width()) // 2,
                                resume_button.y + (resume_button.height - resume_text.get_height()) // 2))
         win.blit(quit_text, (quit_button.x + (quit_button.width - quit_text.get_width()) // 2,
                              quit_button.y + (quit_button.height - quit_text.get_height()) // 2))
+
+        # Manejar eventos del mouse durante la pausa
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if resume_button.collidepoint(mouse_x, mouse_y):
+                    paused = False
+                    # Si se presiona el botón de reintentar, restablecer la posición de la bola
+                    ball.center = (random.randint(0, WIDTH - BALL_RADIUS * 2), BALL_RADIUS)
+                elif quit_button.collidepoint(mouse_x, mouse_y):
+                    running = False
+                    paused = False
 
     pygame.display.flip()
 
