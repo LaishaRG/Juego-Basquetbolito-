@@ -1,9 +1,17 @@
 import pygame
 import sys
 import random
+import pickle
 
 # Inicializar Pygame
 pygame.init()
+SCORES_FILE = "top_scores.pkl"
+top_scores = []
+try:
+    with open(SCORES_FILE, "rb") as file:
+        top_scores = pickle.load(file)
+except (FileNotFoundError, EOFError):
+    top_scores = []
 
 # Configurar la ventana
 WIDTH, HEIGHT = 700, 600
@@ -44,6 +52,74 @@ button_width, button_height = 120, 60
 resume_button = pygame.Rect(WIDTH // 2 - button_width - 10, HEIGHT // 2 - button_height // 2, button_width,
                             button_height)
 quit_button = pygame.Rect(WIDTH // 2 + 10, HEIGHT // 2 - button_height // 2, button_width, button_height)
+
+
+def display_top_scores(top_scores):
+    font = pygame.font.Font(None, 24)
+    y_position = 10  # Posición inicial en y para mostrar el top 5
+
+    for i, (name, score) in enumerate(top_scores, 1):
+        text = font.render(f"{i}. {name}: {score}", True, (255, 255, 255))
+        win.blit(text, (WIDTH - text.get_width() - 10, y_position))
+        y_position += text.get_height() + 5
+
+
+def get_player_name():
+    color_inactive = pygame.Color('lightskyblue3')
+    color_active = pygame.Color('dodgerblue2')
+    color = color_inactive
+    active = False
+    text = ''
+    font = pygame.font.Font(None, 32)
+
+    # Configuración de la ventana emergente
+    popup_width, popup_height = WIDTH // 2, HEIGHT // 4
+    popup_rect = pygame.Rect(WIDTH // 4, HEIGHT // 3, popup_width, popup_height)
+
+    input_box = pygame.Rect(0, 0, popup_width - 20, 32)
+    input_box.center = popup_rect.center
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if popup_rect.collidepoint(event.pos):
+                    active = not active
+                else:
+                    active = False
+                color = color_active if active else color_inactive
+            if event.type == pygame.KEYDOWN:
+                if active:
+                    if event.key == pygame.K_RETURN:
+                        return text
+                    elif event.key == pygame.K_BACKSPACE:
+                        text = text[:-1]
+                    else:
+                        text += event.unicode
+
+        win.fill((255, 255, 255))
+
+        # Dibujamos la ventana emergente
+        pygame.draw.rect(win, (255, 255, 255), popup_rect)  # Cambiamos el color de fondo
+        pygame.draw.rect(win, (169, 169, 169), popup_rect, 2)
+
+        # Dibujamos el texto "Ingresa tu nombre" centrado
+        prompt_text = font.render("Ingresa tu nombre", True, (0, 0, 0))
+        text_x = popup_rect.centerx - prompt_text.get_width() // 2
+        win.blit(prompt_text, (text_x, popup_rect.top + 10))
+
+        # Centramos el campo de texto
+        input_box.centerx = popup_rect.centerx  # Ajustamos el centro en el eje X
+        txt_surface = font.render(text, True, color)
+        width = max(200, txt_surface.get_width() + 10)
+        input_box.w = width
+        win.blit(txt_surface, (input_box.x + 5, input_box.y + 5))
+        pygame.draw.rect(win, color, input_box, 2)
+        pygame.display.flip()
+        pygame.time.wait(30)
+
 
 # Bucle principal del juego
 running = True
@@ -108,9 +184,22 @@ while running:
             if basket.left <= ball.centerx <= basket.right:
                 score += 1
                 if score > best_score:
-                    best_score += 1
+                    best_score = score
+
                 ball.center = (random.randint(0, WIDTH - BALL_RADIUS * 2), BALL_RADIUS)
             else:
+                if score > 0:  # Verificar si se hizo al menos una canasta antes de perder
+                    print(f"¡Has perdido! Tu puntuación final fue {score}.")
+                    # Verificar si el puntaje pertenece al top 5
+                    if len(top_scores) < 5 or score > top_scores[-1][1]:
+                        player_name = get_player_name()
+                        top_scores.append((player_name, score))
+                        top_scores.sort(key=lambda x: x[1], reverse=True)
+                        top_scores = top_scores[:5]
+
+                        with open(SCORES_FILE, "wb") as file:
+                            pickle.dump(top_scores, file)
+
                 score = 0
                 ball.center = (random.randint(0, WIDTH - BALL_RADIUS * 2), BALL_RADIUS)
                 BALL_VELOCITY = BASE_BALL_VELOCITY
@@ -144,6 +233,7 @@ while running:
                     running = False
                     paused = False
 
+    display_top_scores(top_scores)
     pygame.display.flip()
 
 # Salir de Pygame
